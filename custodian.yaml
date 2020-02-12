@@ -1,0 +1,63 @@
+pipeline-name: cloud-custodian
+platform: Linux
+instance-profile: # To use a pre-created instance-profile, omit the file key.
+  name: ec2-image-builder-default
+  file: iam-policy.json
+components: # Component configuration is the exact yaml structure supported by AWS. Provide the arn for shared components
+  - python-3:
+      arn: arn:aws:imagebuilder:eu-west-1:aws:component/python-3-linux/1.0.0
+  - python3-cloud-custodian:
+      name: SetupCloudCustodian
+      description: Install Cloud Custodian under a user
+      schemaVersion: 1.0
+      phases:
+        - name: build
+          steps:
+            - name: CreateUser
+              action: ExecuteBash
+              inputs:
+                commands:
+                  - if ! getent passwd custodian > /dev/null 2>&1; then useradd -m custodian; fi
+            - name: SetupVirtualEnv
+              action: ExecuteBash
+              inputs:
+                commands:
+                  - |
+                    if [ ! -d "/home/custodian/venv" ]
+                    then
+                      sudo -u custodian pip3 install --user virtualenv
+                      sudo -u custodian /home/custodian/.local/bin/virtualenv -p /usr/bin/python3 /home/custodian/venv
+                    fi
+            - name: InstallCloudCustodian
+              action: ExecuteBash
+              inputs:
+                commands:
+                  - sudo -u custodian /home/custodian/venv/bin/pip install c7n==0.8.45.3
+                  - sudo -u custodian /home/custodian/venv/bin/pip install c7n-mailer==0.5.6
+# If semanticVersion is not provided then it will be set to 0.0.1 for new recipes or incremented for pre-existing
+image-recipe:
+  name: CloudCustodian
+  description: Setup Cloud Custodian AMI
+  components: # List of the components declared above, use the key name and the arn will be retrieved
+    - python-3
+    - python3-cloud-custodian
+  parentImage: arn:aws:imagebuilder:eu-west-1:aws:image/amazon-linux-2-x86/2019.11.21
+infrastructure-configuration:
+  name: CloudCustodian
+  description: Cloud Custodian
+  instanceTypes:
+    - t3.nano
+    - t3.medium
+  terminateInstanceOnFailure: True
+distribution-configuration:
+  name: CloudCustodian
+  description: Cloud Custodian 0.8.45.3 on Python 3
+  distributions: # The current region will always be included.
+    - region: us-west-1
+      amiDistributionConfiguration:
+        name: Cloud Custodian {{ imagebuilder:buildDate }}
+        description: Cloud Custodian 0.8.45.3 on Python 3
+        amiTags:
+          Name: Cloud Custodian 0.8.45.3 on Python 3
+          version: 0.8.45.3
+          application: Cloud Custodian

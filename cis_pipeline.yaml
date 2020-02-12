@@ -1,0 +1,601 @@
+pipeline-name: cis-benchmark
+platform: Linux
+instance-profile: # To use a pre-created instance-profile, omit the file key.
+  name: ec2-image-builder-default
+  file: iam-policy.json
+components: # Component configuration is the exact yaml structure supported by AWS. Provide the arn for shared components
+  - cis-benchmark:
+      name: CISBenchmarks
+      description: This component builds an hardened image according to CIS Amazon Linux 2 Benchmark version 1.0.0
+      schemaVersion: 1.0
+      phases:
+        - name: build
+          steps:
+
+            - name: DisableCramfsMount
+              action: ExecuteBash
+              inputs:
+                commands:
+                  - echo "install cramfs /bin/true" > /etc/modprobe.d/cramfs.conf
+
+            - name: DisableHfsMount
+              action: ExecuteBash
+              inputs:
+                commands:
+                  - echo "install hfs /bin/true" > /etc/modprobe.d/hfs.conf
+            - name: DisableHfsplusMount
+              action: ExecuteBash
+              inputs:
+                commands:
+                  - echo "install hfsplus /bin/true" > /etc/modprobe.d/hfsplus.conf
+            - name: DisableSquashfsMount
+              action: ExecuteBash
+              inputs:
+                commands:
+                  - echo "install squashfs /bin/true" > /etc/modprobe.d/squashfs.conf
+            - name: DisableUdfMount
+              action: ExecuteBash
+              inputs:
+                commands:
+                  - echo "install udf /bin/true" > /etc/modprobe.d/udf.conf
+            - name: ShmConfiguration
+              action: ExecuteBash
+              inputs:
+                commands:
+                  - echo "tmpfs /dev/shm tmpfs rw,noexec,nodev,nosuid 0 0" >> /etc/fstab
+                  - mount -a
+            - name: StickybitConfiguration
+              action: ExecuteBash
+              inputs:
+                commands:
+                  - df --local -P | awk {'if (NR!=1) print $6'} | xargs -I '{}' find '{}' -xdev -type d -perm -0002 2>/dev/null | xargs chmod a+t
+            - name: InstallAide
+              action: ExecuteBash
+              inputs:
+                commands:
+                  - yum install -y aide
+                  - aide --init
+                  - mv /var/lib/aide/aide.db.new.gz /var/lib/aide/aide.db.gz
+            - name: AideCheck
+              action: ExecuteBash
+              inputs:
+                commands:
+                  - echo "0 5 * * * root /usr/sbin/aide --check" > /etc/cron.d/aide
+            - name: BootloaderConfig
+              action: ExecuteBash
+              inputs:
+                commands:
+                  - chown root:root /boot/grub2/grub.cfg
+                  - chmod og-rwx /boot/grub2/grub.cfg
+            - name: SingleUserAuthentication
+              action: ExecuteBash
+              inputs:
+                commands:
+                  - echo "SINGLE=/sbin/sulogin" >> /etc/sysconfig/init
+            - name: CoreDumpRestriction
+              action: ExecuteBash
+              inputs:
+                commands:
+                  - echo "* hard core 0" >> /etc/security/limits.conf
+                  - echo "fs.suid_dumpable = 0" >> /etc/sysctl.d/10-cis.conf
+            - name: ASLREnabled
+              action: ExecuteBash
+              inputs:
+                commands:
+                  - echo "kernel.randomize_va_space = 2" >> /etc/sysctl.d/10-cis.conf
+            - name: MessageOfTheDay
+              action: ExecuteBash
+              inputs:
+                commands:
+                  - echo "UNAUTHORIZED ACCESS TO THIS DEVICE IS PROHIBITED" > /etc/motd
+            - name: LocalLoginBanner
+              action: ExecuteBash
+              inputs:
+                commands:
+                  - echo "UNAUTHORIZED ACCESS TO THIS DEVICE IS PROHIBITED" > /etc/issue
+            - name: RemoteLoginBanner
+              action: ExecuteBash
+              inputs:
+                commands:
+                  - echo "UNAUTHORIZED ACCESS TO THIS DEVICE IS PROHIBITED" > /etc/issue.net
+            - name: MotdPermissions
+              action: ExecuteBash
+              inputs:
+                commands:
+                  - chown root:root /etc/motd
+                  - chmod 644 /etc/motd
+            - name: IssuePermissions
+              action: ExecuteBash
+              inputs:
+                commands:
+                  - chown root:root /etc/issue
+                  - chmod 644 /etc/issue
+            - name: IssueNetPermissions
+              action: ExecuteBash
+              inputs:
+                commands:
+                  - chown root:root /etc/issue.net
+                  - chmod 644 /etc/issue.net
+            - name: SecurityUpdates
+              action: ExecuteBash
+              inputs:
+                commands:
+                  - yum update -y --security
+
+            - name: ChronyConfiguration
+              action: ExecuteBash
+              inputs:
+                commands:
+                  - echo "OPTIONS=\"-u chrony\"" > /etc/sysconfig/chronyd
+            - name: DisableRpcbind
+              action: ExecuteBash
+              inputs:
+                commands:
+                  - systemctl disable rpcbind.service
+
+            - name: IPForwardingDisabled
+              action: ExecuteBash
+              inputs:
+                commands:
+                  - echo "net.ipv4.ip_forward = 0" >> /etc/sysctl.d/10-cis.conf
+                  - echo "net.ipv6.conf.all.forwarding = 0" >> /etc/sysctl.d/10-cis.conf
+            - name: PacketRedirectDisabled
+              action: ExecuteBash
+              inputs:
+                commands:
+                  - echo "net.ipv4.conf.all.send_redirects = 0" >> /etc/sysctl.d/10-cis.conf
+                  - echo "net.ipv4.conf.default.send_redirects = 0" >> /etc/sysctl.d/10-cis.conf
+            - name: SourceRoutedPackagesDisabled
+              action: ExecuteBash
+              inputs:
+                commands:
+                  - echo "net.ipv4.conf.all.accept_source_route = 0" >> /etc/sysctl.d/10-cis.conf
+                  - echo "net.ipv4.conf.default.accept_source_route = 0" >> /etc/sysctl.d/10-cis.conf
+                  - echo "net.ipv6.conf.all.accept_source_route = 0" >> /etc/sysctl.d/10-cis.conf
+                  - echo "net.ipv6.conf.default.accept_source_route = 0" >> /etc/sysctl.d/10-cis.conf
+            - name: ICMPRedirectsDisabled
+              action: ExecuteBash
+              inputs:
+                commands:
+                  - echo "net.ipv4.conf.all.accept_redirects = 0" >> /etc/sysctl.d/10-cis.conf
+                  - echo "net.ipv4.conf.default.accept_redirects = 0" >> /etc/sysctl.d/10-cis.conf
+                  - echo "net.ipv6.conf.all.accept_redirects = 0" >> /etc/sysctl.d/10-cis.conf
+                  - echo "net.ipv6.conf.default.accept_redirects = 0" >> /etc/sysctl.d/10-cis.conf
+            - name: ICMPRedirectsNotAccepted
+              action: ExecuteBash
+              inputs:
+                commands:
+                  - echo "net.ipv4.conf.all.secure_redirects = 0" >> /etc/sysctl.d/10-cis.conf
+                  - echo "net.ipv4.conf.default.secure_redirects = 0" >> /etc/sysctl.d/10-cis.conf
+            - name: SuspiciousPacketsLogged
+              action: ExecuteBash
+              inputs:
+                commands:
+                  - echo "net.ipv4.conf.all.log_martians = 1" >> /etc/sysctl.d/10-cis.conf
+                  - echo "net.ipv4.conf.default.log_martians = 1" >> /etc/sysctl.d/10-cis.conf
+            - name: IgnoreICMPBroadcast
+              action: ExecuteBash
+              inputs:
+                commands:
+                  - echo "net.ipv4.icmp_echo_ignore_broadcasts = 1" >> /etc/sysctl.d/10-cis.conf
+            - name: BogusICMPIgnored
+              action: ExecuteBash
+              inputs:
+                commands:
+                  - echo "net.ipv4.icmp_ignore_bogus_error_responses = 1" >> /etc/sysctl.d/10-cis.conf
+            - name: ReversePathFilteringDisabled
+              action: ExecuteBash
+              inputs:
+                commands:
+                  - echo "net.ipv4.conf.all.rp_filter = 1" >> /etc/sysctl.d/10-cis.conf
+                  - echo "net.ipv4.conf.default.rp_filter = 1" >> /etc/sysctl.d/10-cis.conf
+            - name: TCPSynCookiesEnabled
+              action: ExecuteBash
+              inputs:
+                commands:
+                  - echo "net.ipv4.tcp_syncookies = 1" >> /etc/sysctl.d/10-cis.conf
+            - name: IPv6RouterAdvertisementNotAccepted
+              action: ExecuteBash
+              inputs:
+                commands:
+                  - echo "net.ipv6.conf.all.accept_ra = 0" >> /etc/sysctl.d/10-cis.conf
+                  - echo "net.ipv6.conf.default.accept_ra = 0" >> /etc/sysctl.d/10-cis.conf
+            - name: EtcHostsAllowPermissions
+              action: ExecuteBash
+              inputs:
+                commands:
+                  - chown root:root /etc/hosts.allow
+                  - chmod 644 /etc/hosts.allow
+            - name: EtcHostsDenyPermissions
+              action: ExecuteBash
+              inputs:
+                commands:
+                  - chown root:root /etc/hosts.deny
+                  - chmod 644 /etc/hosts.deny
+            - name: DCCPDisabled
+              action: ExecuteBash
+              inputs:
+                commands:
+                  - echo "install dccp /bin/true" >> /etc/modprobe.d/CIS.conf
+            - name: SCTPDisabled
+              action: ExecuteBash
+              inputs:
+                commands:
+                  - echo "install sctp /bin/true" >> /etc/modprobe.d/CIS.conf
+            - name: RDSDisabled
+              action: ExecuteBash
+              inputs:
+                commands:
+                  - echo "install rds /bin/true" >> /etc/modprobe.d/CIS.conf
+            - name: TIPCDisabled
+              action: ExecuteBash
+              inputs:
+                commands:
+                  - echo "install tipc /bin/true" >> /etc/modprobe.d/CIS.conf
+            - name: DisableIPv6
+              action: ExecuteBash
+              inputs:
+                commands:
+                  - |
+                    cat << EOF > /etc/default/grub
+                    GRUB_CMDLINE_LINUX_DEFAULT="console=tty0 console=ttyS0,115200n8 net.ifnames=0 biosdevname=0 nvme_core.io_timeout=4294967295 rd.emergency=poweroff rd.shell=0 ipv6.disable=1 audit=1"
+                    GRUB_TIMEOUT=0
+                    EOF
+            - name: ConfigureAuditd
+              action: ExecuteBash
+              inputs:
+                commands:
+                  - |
+                    cat << EOF > /etc/audit/auditd.conf
+                    local_events = yes
+                    write_logs = yes
+                    log_file = /var/log/audit/audit.log
+                    log_group = root
+                    log_format = RAW
+                    flush = INCREMENTAL_ASYNC
+                    freq = 50
+                    max_log_file = 8
+                    num_logs = 5
+                    priority_boost = 4
+                    disp_qos = lossy
+                    dispatcher = /sbin/audispd
+                    name_format = NONE
+                    ##name = mydomain
+                    max_log_file_action = keep_logs
+                    space_left = 75
+                    space_left_action = email
+                    verify_email = yes
+                    action_mail_acct = root
+                    admin_space_left = 50
+                    admin_space_left_action = halt
+                    disk_full_action = SUSPEND
+                    disk_error_action = SUSPEND
+                    use_libwrap = yes
+                    ##tcp_listen_port = 60
+                    tcp_listen_queue = 5
+                    tcp_max_per_addr = 1
+                    ##tcp_client_ports = 1024-65535
+                    tcp_client_max_idle = 0
+                    enable_krb5 = no
+                    krb5_principal = auditd
+                    ##krb5_key_file = /etc/audit/audit.key
+                    distribute_network = no
+                    EOF
+            - name: ConfigureAuditRules
+              action: ExecuteBash
+              inputs:
+                commands:
+                  - |
+                    cat << EOF > /etc/audit/rules.d/audit.rules
+                    ### CIS Benchmark Audit Rules
+                    -D
+                    -b 8192
+                    -f 1
+                    # Audit all user actions
+                    -a exit,always -F arch=b64 -F euid=0 -S execve -k rootact
+                    -a exit,always -F arch=b32 -F euid=0 -S execve -k rootact
+                    -a exit,always -F arch=b64 -F euid>=1000 -S execve -k useract
+                    -a exit,always -F arch=b32 -F euid>=1000 -S execve -k useract
+                    # CIS Benchmark: Ensure events that modify date and time information are collected
+                    -a always,exit -F arch=b64 -S adjtimex -S settimeofday -k time-change
+                    -a always,exit -F arch=b32 -S adjtimex -S settimeofday -S stime -k time- change
+                    -a always,exit -F arch=b64 -S clock_settime -k time-change
+                    -a always,exit -F arch=b32 -S clock_settime -k time-change
+                    -w /etc/localtime -p wa -k time-change
+                    # CIS Benchmark: Ensure events that modify user/group information are collected
+                    -w /etc/group -p wa -k identity
+                    -w /etc/passwd -p wa -k identity
+                    -w /etc/gshadow -p wa -k identity
+                    -w /etc/shadow -p wa -k identity
+                    -w /etc/security/opasswd -p wa -k identity
+                    # CIS Benchmark: Ensure events that modify the system's network environment are collected
+                    -a always,exit -F arch=b64 -S sethostname -S setdomainname -k system-locale
+                    -a always,exit -F arch=b32 -S sethostname -S setdomainname -k system-locale
+                    -w /etc/issue -p wa -k system-locale
+                    -w /etc/issue.net -p wa -k system-locale
+                    -w /etc/hosts -p wa -k system-locale
+                    -w /etc/sysconfig/network -p wa -k system-locale
+                    -w /etc/sysconfig/network-scripts/ -p wa -k system-locale
+                    # CIS Benchmark: Ensure events that modify the system's Mandatory Access Controls are collected
+                    -w /etc/selinux/ -p wa -k MAC-policy
+                    -w /usr/share/selinux/ -p wa -k MAC-policy
+                    # CIS Benchmark: Ensure login and logout events are collected
+                    -w /var/log/lastlog -p wa -k logins
+                    -w /var/run/faillock/ -p wa -k logins
+                    # CIS Benchmark: Ensure session initiation information is collected
+                    -w /var/run/utmp -p wa -k session
+                    -w /var/log/wtmp -p wa -k logins
+                    -w /var/log/btmp -p wa -k logins
+                    # CIS Benchmark: Ensure discretionary access control permission modification events are collected
+                    -a always,exit -F arch=b64 -S chmod -S fchmod -S fchmodat -F auid>=500 -F
+                    auid!=4294967295 -k perm_mod
+                    -a always,exit -F arch=b32 -S chmod -S fchmod -S fchmodat -F auid>=500 -F auid!=4294967295 -k perm_mod
+                    -a always,exit -F arch=b64 -S chown -S fchown -S fchownat -S lchown -F auid>=500 -F auid!=4294967295 -k perm_mod
+                    -a always,exit -F arch=b32 -S chown -S fchown -S fchownat -S lchown -F auid>=500 -F auid!=4294967295 -k perm_mod
+                    -a always,exit -F arch=b64 -S setxattr -S lsetxattr -S fsetxattr -S removexattr -S lremovexattr -S fremovexattr -F auid>=500 -F auid!=4294967295 -k perm_mod
+                    -a always,exit -F arch=b32 -S setxattr -S lsetxattr -S fsetxattr -S removexattr -S lremovexattr -S fremovexattr -F auid>=500 -F auid!=4294967295 -k perm_mod
+                    # CIS Benchmark: Ensure unsuccessful unauthorized file access attempts are collected
+                    -a always,exit -F arch=b64 -S creat -S open -S openat -S truncate -S ftruncate -F exit=-EACCES -F auid>=500 -F auid!=4294967295 -k access
+                    -a always,exit -F arch=b32 -S creat -S open -S openat -S truncate -S ftruncate -F exit=-EACCES -F auid>=500 -F auid!=4294967295 -k access
+                    -a always,exit -F arch=b64 -S creat -S open -S openat -S truncate -S ftruncate -F exit=-EPERM -F auid>=500 -F auid!=4294967295 -k access
+                    -a always,exit -F arch=b32 -S creat -S open -S openat -S truncate -S ftruncate -F exit=-EPERM -F auid>=500 -F auid!=4294967295 -k access
+                    # CIS Benchmark: Ensure successful file system mounts are collected
+                    -a always,exit -F arch=b64 -S mount -F auid>=500 -F auid!=4294967295 -k mounts
+                    -a always,exit -F arch=b32 -S mount -F auid>=500 -F auid!=4294967295 -k mounts
+                    # CIS Benchmark: Ensure file deletion events by users are collected
+                    -a always,exit -F arch=b64 -S unlink -S unlinkat -S rename -S renameat -F auid>=500 -F auid!=4294967295 -k delete
+                    -a always,exit -F arch=b32 -S unlink -S unlinkat -S rename -S renameat -F auid>=500 -F auid!=4294967295 -k delete
+                    # CIS Benchmark: Ensure changes to system administration scope (sudoers) is collected
+                    -w /etc/sudoers -p wa -k scope
+                    -w /etc/sudoers.d/ -p wa -k scope
+                    # CIS Benchmark: Ensure system administrator actions (sudolog) are collected
+                    -w /var/log/sudo.log -p wa -k actions
+                    # CIS Benchmark: Ensure kernel module loading and unloading is collected
+                    -w /sbin/insmod -p x -k modules
+                    -w /sbin/rmmod -p x -k modules
+                    -w /sbin/modprobe -p x -k modules
+                    -a always,exit -F arch=b64 -S init_module -S delete_module -k modules
+                    # CIS Benchmark: Ensure the audit configuration is immutable
+                    -e 2
+                    EOF
+            - name: RsyslogConfiguration
+              action: ExecuteBash
+              inputs:
+                commands:
+                  - |
+                    cat << EOF > /etc/rsyslog.conf
+                    $ModLoad imuxsock # provides support for local system logging (e.g. via logger command)
+                    $ModLoad imjournal # provides access to the systemd journal
+                    $WorkDirectory /var/lib/rsyslog
+                    $ActionFileDefaultTemplate RSYSLOG_TraditionalFileFormat
+                    $IncludeConfig /etc/rsyslog.d/*.conf
+                    $OmitLocalLogging on
+                    $IMJournalStateFile imjournal.state
+                    $FileCreateMode 0640
+                    *.info;mail.none;authpriv.none;cron.none                /var/log/messages
+                    authpriv.*                                              /var/log/secure
+                    mail.*                                                  -/var/log/maillog
+                    cron.*                                                  /var/log/cron
+                    *.emerg                                                 :omusrmsg:*
+                    uucp,news.crit                                          /var/log/spooler
+                    local7.*                                                /var/log/boot.log
+                    EOF
+            - name: LogFilePermissions
+              action: ExecuteBash
+              inputs:
+                commands:
+                  - find /var/log -type f -exec chmod g-wx,o-rwx {} +
+
+            - name: CronPermissions
+              action: ExecuteBash
+              inputs:
+                commands:
+                  - chown root:root /etc/crontab
+                  - chmod og-rwx /etc/crontab
+            - name: CronHourlyPermissions
+              action: ExecuteBash
+              inputs:
+                commands:
+                  - chown root:root /etc/cron.hourly
+                  - chmod og-rwx /etc/cron.hourly
+            - name: CronDailyPermissions
+              action: ExecuteBash
+              inputs:
+                commands:
+                  - chown root:root /etc/cron.daily
+                  - chmod og-rwx /etc/cron.daily
+            - name: CronWeeklyPermissions
+              action: ExecuteBash
+              inputs:
+                commands:
+                  - chown root:root /etc/cron.weekly
+                  - chmod og-rwx /etc/cron.weekly
+            - name: CronMonthlyPermissions
+              action: ExecuteBash
+              inputs:
+                commands:
+                  - chown root:root /etc/cron.monthly
+                  - chmod og-rwx /etc/cron.monthly
+            - name: CrondPermissions
+              action: ExecuteBash
+              inputs:
+                commands:
+                  - chown root:root /etc/cron.d
+                  - chmod og-rwx /etc/cron.d
+            - name: CronRestrictions
+              action: ExecuteBash
+              inputs:
+                commands:
+                  - rm /etc/cron.deny
+                  - touch /etc/cron.allow
+                  - touch /etc/at.allow
+                  - chmod og-rwx /etc/cron.allow
+                  - chmod og-rwx /etc/at.allow
+                  - chown root:root /etc/cron.allow
+                  - chown root:root /etc/at.allow
+            - name: SSHConfiguration
+              action: ExecuteBash
+              inputs:
+                commands:
+                  - |
+                    cat << EOF > /etc/ssh/sshd_config
+                    Protocol 2
+                    HostKey /etc/ssh/ssh_host_rsa_key
+                    HostKey /etc/ssh/ssh_host_ecdsa_key
+                    HostKey /etc/ssh/ssh_host_ed25519_key
+                    SyslogFacility AUTHPRIV
+                    LogLevel INFO
+                    LoginGraceTime 60
+                    PermitRootLogin no
+                    MaxAuthTries 4
+                    AuthorizedKeysFile .ssh/authorized_keys
+                    HostbasedAuthentication no
+                    IgnoreRhosts yes
+                    PermitEmptyPasswords no
+                    PasswordAuthentication yes
+                    ChallengeResponseAuthentication no
+                    GSSAPIAuthentication yes
+                    GSSAPICleanupCredentials no
+                    UsePAM yes
+                    X11Forwarding no
+                    PermitUserEnvironment no
+                    ClientAliveInterval 300
+                    ClientAliveCountMax 0
+                    Banner /etc/issue.net
+                    AcceptEnv LANG LC_CTYPE LC_NUMERIC LC_TIME LC_COLLATE LC_MONETARY LC_MESSAGES
+                    AcceptEnv LC_PAPER LC_NAME LC_ADDRESS LC_TELEPHONE LC_MEASUREMENT
+                    AcceptEnv LC_IDENTIFICATION LC_ALL LANGUAGE
+                    AcceptEnv XMODIFIERS
+                    Subsystem sftp	/usr/libexec/openssh/sftp-server
+                    AuthorizedKeysCommand /usr/bin/timeout 5s /opt/aws/bin/curl_authorized_keys %u %f
+                    AuthorizedKeysCommandUser ec2-instance-connect
+                    HostKey /etc/ssh/ssh_host_ed25519_key
+                    HostKey /etc/ssh/ssh_host_rsa_key
+                    KexAlgorithms curve25519-sha256@libssh.org,diffie-hellman-group-exchange-sha256
+                    Ciphers chacha20-poly1305@openssh.com,aes256-gcm@openssh.com,aes128-gcm@openssh.com,aes256-ctr,aes192-ctr,aes128-ctr
+                    MACs hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com,umac-128-etm@openssh.com,hmac-sha2-512,hmac-sha2-256,umac-128@openssh.com
+                    EOF
+            - name: UmaskConfiguration
+              action: ExecuteBash
+              inputs:
+                commands:
+                  - |
+                    cat << EOF > /etc/bashrc
+                    # /etc/bashrc
+                    # System wide functions and aliases
+                    # Environment stuff goes in /etc/profile
+
+                    # It's NOT a good idea to change this file unless you know what you
+                    # are doing. It's much better to create a custom.sh shell script in
+                    # /etc/profile.d/ to make custom changes to your environment, as this
+                    # will prevent the need for merging in future updates.
+
+                    # are we an interactive shell?
+                    if [ "$PS1" ]; then
+                      if [ -z "$PROMPT_COMMAND" ]; then
+                        case $TERM in
+                        xterm*|vte*)
+                          if [ -e /etc/sysconfig/bash-prompt-xterm ]; then
+                              PROMPT_COMMAND=/etc/sysconfig/bash-prompt-xterm
+                          elif [ "${VTE_VERSION:-0}" -ge 3405 ]; then
+                              PROMPT_COMMAND="__vte_prompt_command"
+                          else
+                              PROMPT_COMMAND='printf "\033]0;%s@%s:%s\007" "${USER}" "${HOSTNAME%%.*}" "${PWD/#$HOME/~}"'
+                          fi
+                          ;;
+                        screen*)
+                          if [ -e /etc/sysconfig/bash-prompt-screen ]; then
+                              PROMPT_COMMAND=/etc/sysconfig/bash-prompt-screen
+                          else
+                              PROMPT_COMMAND='printf "\033k%s@%s:%s\033\\" "${USER}" "${HOSTNAME%%.*}" "${PWD/#$HOME/~}"'
+                          fi
+                          ;;
+                        *)
+                          [ -e /etc/sysconfig/bash-prompt-default ] && PROMPT_COMMAND=/etc/sysconfig/bash-prompt-default
+                          ;;
+                        esac
+                      fi
+                      # Turn on parallel history
+                      shopt -s histappend
+                      history -a
+                      # Turn on checkwinsize
+                      shopt -s checkwinsize
+                      [ "$PS1" = "\\s-\\v\\\$ " ] && PS1="[\u@\h \W]\\$ "
+                      # You might want to have e.g. tty in prompt (e.g. more virtual machines)
+                      # and console windows
+                      # If you want to do so, just add e.g.
+                      # if [ "$PS1" ]; then
+                      #   PS1="[\u@\h:\l \W]\\$ "
+                      # fi
+                      # to your custom modification shell script in /etc/profile.d/ directory
+                    fi
+
+                    if ! shopt -q login_shell ; then # We're not a login shell
+                        # Need to redefine pathmunge, it get's undefined at the end of /etc/profile
+                        pathmunge () {
+                            case ":${PATH}:" in
+                                *:"$1":*)
+                                    ;;
+                                *)
+                                    if [ "$2" = "after" ] ; then
+                                        PATH=$PATH:$1
+                                    else
+                                        PATH=$1:$PATH
+                                    fi
+                            esac
+                        }
+
+                        # By default, we want umask to get set. This sets it for non-login shell.
+                        # Current threshold for system reserved uid/gids is 200
+                        # You could check uidgid reservation validity in
+                        # /usr/share/doc/setup-*/uidgid file
+                        if [ $UID -gt 199 ] && [ "`/usr/bin/id -gn`" = "`/usr/bin/id -un`" ]; then
+                           umask 002
+                        else
+                           umask 027
+                        fi
+
+                        SHELL=/bin/bash
+                        # Only display echos from profile.d scripts if we are no login shell
+                        # and interactive - otherwise just process them to set envvars
+                        for i in /etc/profile.d/*.sh; do
+                            if [ -r "$i" ]; then
+                                if [ "$PS1" ]; then
+                                    . "$i"
+                                else
+                                    . "$i" >/dev/null
+                                fi
+                            fi
+                        done
+
+                        unset i
+                        unset -f pathmunge
+                    fi
+
+                    TMOUT=600
+                    EOF
+# If semanticVersion is not provided then it will be set to 0.0.1 for new recipes or incremented for pre-existing
+image-recipe:
+  name: cis-benchmark
+  description: Builds an hardened image according to CIS Amazon Linux 2 Benchmark version 1.0.0
+  components: # List of the components declared above, use the key name and the arn will be retrieved
+    - cis-benchmark
+  parentImage: arn:aws:imagebuilder:eu-west-1:aws:image/amazon-linux-2-x86/2019.11.21
+infrastructure-configuration:
+  name: cis-benchmark
+  description: Builds an hardened image according to CIS Amazon Linux 2 Benchmark version 1.0.0
+  instanceTypes:
+    - t3.nano
+    - t3.medium
+  terminateInstanceOnFailure: True
+distribution-configuration:
+  name: cis-benchmark
+  description: Builds an hardened image according to CIS Amazon Linux 2 Benchmark version 1.0.0
+  distributions: # The current region will always be included.
+    - region: eu-west-1
+      amiDistributionConfiguration:
+        name: Amazon Linux 2 CIS Benchmark {{ imagebuilder:buildDate }}
+        description: Builds an hardened image according to CIS Amazon Linux 2 Benchmark version 1.0.0
+        amiTags:
+          Name: Amazon Linux 2 CIS Benchmark 1.0.0
+          application: CIS Benchmark
