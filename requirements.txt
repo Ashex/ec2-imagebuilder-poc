@@ -1,3 +1,4 @@
 aws-auth-helper >= 1.5.5
 boto3           >= 1.10.34
 botocore        >= 1.13.34
+pyyaml          >= 5.3
