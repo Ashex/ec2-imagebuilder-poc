@@ -1,15 +1,15 @@
 # EC2 Image Builder Proof of Concept
 
 
-In December 2019 AWS released EC2 Image Pipeline, a rather interesting service for generating AMIs:
+In December 2019 AWS released EC2 Image Builder, a rather interesting service for generating AMIs:
 
 It is a service that makes it easier and faster to build and maintain secure images. Image Builder simplifies the creation, patching, testing, distribution, and sharing of Linux or Windows Server images.
 
 Unfortunately the Console for EC2 Image Builder has quite a few limitations which don't reflect the strengths of the service.
 
-This framework was created as a proof of concept to show how to create the Image Pipeline and all of its dependencies. 
+This framework was created as a proof of concept to show how to create the Image Pipeline and all of its dependencies and is for testing purposes (i.e not production ready). 
 
-The Pipeline definition is done via a yaml file that is consumed by the script, presently it will generate a new version of any versionable resources and then recreate the pipeline in order to deploy that new version.
+The Pipeline definition is done via a yaml file which is consumed by the script, presently it will generate a new version of any versionable resources and then recreate the pipeline in order to deploy that new version. A flag is available to recreate all non-versionable resource.
 
 Two pipeline configurations are provided:
 
